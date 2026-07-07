@@ -123,8 +123,15 @@ export default function Home() {
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
     setVerifyLoading(true); setVerifyResult(null); setVerifyError("");
+    const trimmed = verifyCid.trim();
     try {
-      const res = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cid: verifyCid.trim() }) });
+      // Check local cache first — evidence is stored here immediately after preservation
+      const cached = history.find((h) => h.cid === trimmed);
+      if (cached) {
+        setVerifyResult({ verified: true, data: cached, gatewayUsed: "local-cache" });
+        return;
+      }
+      const res = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cid: trimmed }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setVerifyResult(data);
@@ -371,7 +378,9 @@ export default function Home() {
                   <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-emerald-400">Verified on Filecoin</p>
-                    <p className="text-xs text-white/30 mt-0.5 break-all">{verifyResult.gatewayUsed}</p>
+                    <p className="text-xs text-white/30 mt-0.5 break-all">
+                      {verifyResult.gatewayUsed === "local-cache" ? "Served from local session cache — CID matches archived evidence" : verifyResult.gatewayUsed}
+                    </p>
                   </div>
                 </div>
                 {verifyResult.isRawFile ? (
@@ -530,8 +539,8 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       {/* Certificate header */}
       <div className="flex items-start justify-between gap-4 p-4 rounded-lg border border-white/[0.07] bg-white/[0.02]">
         <div>
-          <p className="text-[10px] text-white/30 uppercase tracking-widest font-medium mb-1">Evidence Certificate</p>
-          <p className="text-xs text-white/40 font-mono">{result.evidenceId}</p>
+          <p className="text-[10px] text-white/40 uppercase tracking-widest font-medium mb-1">Evidence Certificate</p>
+          <p className="text-xs text-white/50 font-mono">{result.evidenceId}</p>
         </div>
         <div className={`flex items-center gap-1.5 shrink-0 text-xs font-medium px-2 py-1 rounded border ${sev.badge}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${sev.dot}`} />
@@ -542,7 +551,7 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       {/* Screenshot */}
       {result.screenshotCid && (
         <div className="overflow-hidden rounded-lg border border-white/[0.07]">
-          <p className="text-[10px] text-white/25 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Filecoin</p>
+          <p className="text-[10px] text-white/40 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Filecoin</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`https://ipfs.io/ipfs/${result.screenshotCid}`} alt="Evidence screenshot" className="w-full" />
         </div>
@@ -561,41 +570,41 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
         <DetailCell label="Captured (UTC)" value={new Date(result.capturedAt).toUTCString()} />
         {result.sourceUrl && (
           <div className="px-4 py-3">
-            <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Source URL</p>
-            <a href={result.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-white/60 hover:text-white break-all transition-colors">{result.sourceUrl}</a>
+            <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Source URL</p>
+            <a href={result.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-white/70 hover:text-white break-all transition-colors">{result.sourceUrl}</a>
           </div>
         )}
         <div className="px-4 py-3">
-          <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1.5">Summary</p>
-          <p className="text-xs text-white/70 leading-relaxed">{analysis.summary}</p>
+          <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1.5">Summary</p>
+          <p className="text-xs text-white/80 leading-relaxed">{analysis.summary}</p>
         </div>
         {analysis.keyStatements?.length > 0 && (
           <div className="px-4 py-3 space-y-2">
-            <p className="text-[10px] text-white/30 uppercase tracking-widest">Key Statements</p>
+            <p className="text-[10px] text-white/40 uppercase tracking-widest">Key Statements</p>
             {analysis.keyStatements.map((s, i) => (
-              <div key={i} className="border-l border-white/20 pl-3">
-                <p className="text-xs text-white/60 italic">{s}</p>
+              <div key={i} className="border-l-2 border-white/20 pl-3">
+                <p className="text-xs text-white/75 italic">{s}</p>
               </div>
             ))}
           </div>
         )}
         {analysis.memoryInsight && (
-          <div className="px-4 py-3 bg-indigo-500/[0.04] border-t border-white/[0.05]">
-            <p className="text-[10px] text-indigo-400/70 uppercase tracking-widest mb-1.5">Agent Memory Insight</p>
-            <p className="text-xs text-white/60 leading-relaxed">{analysis.memoryInsight}</p>
+          <div className="px-4 py-3 bg-indigo-500/[0.06] border-t border-indigo-500/20">
+            <p className="text-[10px] text-indigo-400 uppercase tracking-widest mb-1.5">Agent Memory Insight</p>
+            <p className="text-xs text-white/80 leading-relaxed">{analysis.memoryInsight}</p>
           </div>
         )}
         {analysis.threatAssessment && (
-          <div className={`px-4 py-3 ${analysis.threatAssessment.isThreatening ? "bg-red-500/[0.04]" : ""}`}>
-            <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Threat Assessment</p>
+          <div className={`px-4 py-3 ${analysis.threatAssessment.isThreatening ? "bg-red-500/[0.05]" : ""}`}>
+            <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Threat Assessment</p>
             {analysis.threatAssessment.isThreatening ? (
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">{analysis.threatAssessment.type}</p>
-                <p className="text-xs text-white/60">{analysis.threatAssessment.description}</p>
+                <p className="text-xs text-white/75">{analysis.threatAssessment.description}</p>
                 <p className="text-xs text-amber-400 mt-2">Recommendation: {analysis.threatAssessment.recommendedAction}</p>
               </div>
             ) : (
-              <p className="text-xs text-white/40">{analysis.threatAssessment.description}</p>
+              <p className="text-xs text-white/60">{analysis.threatAssessment.description}</p>
             )}
           </div>
         )}
@@ -604,27 +613,22 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       {/* Filecoin proof */}
       <div className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.05]">
         <div className="px-4 py-3">
-          <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Content ID (CID)</p>
+          <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Content ID (CID)</p>
           <div className="flex items-center gap-2">
             <code className="text-xs text-emerald-400 font-mono break-all flex-1">{result.cid}</code>
-            <button onClick={() => onCopy(result.cid)} className="shrink-0 text-[10px] text-white/30 hover:text-white border border-white/10 rounded px-2 py-1 transition-colors">
+            <button onClick={() => onCopy(result.cid)} className="shrink-0 text-[10px] text-white/50 hover:text-white border border-white/10 hover:border-white/30 rounded px-2 py-1 transition-colors">
               {copied === result.cid ? "Copied" : "Copy"}
             </button>
           </div>
         </div>
-        <div className="px-4 py-3 space-y-2">
-          <p className="text-[10px] text-white/30 uppercase tracking-widest">IPFS Gateways</p>
-          {result.gateways?.map((g, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <a href={g} target="_blank" rel="noopener noreferrer" className="text-[11px] text-white/50 hover:text-white truncate flex-1 transition-colors">{g}</a>
-              <button onClick={() => onCopy(g)} className="shrink-0 text-[10px] text-white/20 hover:text-white/60 transition-colors">{copied === g ? "Copied" : "Copy"}</button>
-            </div>
-          ))}
-        </div>
         <div className="px-4 py-3">
           <a href={`/evidence/${result.cid}`} target="_blank" rel="noopener noreferrer"
-            className="text-xs text-white/50 hover:text-white transition-colors">
-            Share certificate link  /evidence/{result.cid.slice(0, 16)}...
+            className="flex items-center justify-between gap-3 group">
+            <div>
+              <p className="text-xs font-medium text-white group-hover:text-white/80 transition-colors">Share certificate</p>
+              <p className="text-[11px] text-white/40 font-mono mt-0.5">/evidence/{result.cid.slice(0, 20)}...</p>
+            </div>
+            <span className="text-white/30 group-hover:text-white/70 transition-colors text-sm">↗</span>
           </a>
         </div>
       </div>
@@ -645,13 +649,16 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       )}
 
       {/* Actions */}
+      <p className="text-[10px] text-white/40 leading-relaxed">
+        Save a copy now. The CID is your permanent proof — without it you cannot verify this evidence later.
+      </p>
       <div className="flex gap-2">
         <button onClick={() => onDownload(result)}
-          className="flex-1 py-2.5 text-xs text-white/50 hover:text-white border border-white/[0.07] hover:border-white/20 rounded-md transition-colors">
+          className="flex-1 py-2.5 text-xs font-medium text-white bg-white/[0.08] hover:bg-white/[0.13] border border-white/[0.12] rounded-md transition-colors">
           Download JSON
         </button>
         <button onClick={() => window.print()}
-          className="flex-1 py-2.5 text-xs text-white/50 hover:text-white border border-white/[0.07] hover:border-white/20 rounded-md transition-colors">
+          className="flex-1 py-2.5 text-xs text-white/60 hover:text-white border border-white/[0.07] hover:border-white/20 rounded-md transition-colors">
           Print Certificate
         </button>
       </div>
@@ -662,8 +669,8 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
 function DetailCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-3">
-      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-xs text-white/70">{value}</p>
+      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">{label}</p>
+      <p className="text-xs text-white/80">{value}</p>
     </div>
   );
 }

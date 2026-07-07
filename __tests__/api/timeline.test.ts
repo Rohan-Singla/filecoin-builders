@@ -70,9 +70,6 @@ describe("POST /api/timeline", () => {
   });
 
   it("passes case name and evidence details to the AI prompt", async () => {
-    const { chat } = (await import("groq-sdk")).prototype;
-    void chat;
-
     const groqModule = jest.requireMock("groq-sdk");
     const mockCreate = groqModule.mock.results[0]?.value?.chat?.completions?.create;
 

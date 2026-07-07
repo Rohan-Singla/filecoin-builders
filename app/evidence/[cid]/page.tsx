@@ -1,20 +1,9 @@
-import { notFound } from "next/navigation";
+"use client";
 
-const GATEWAYS = [
-  (cid: string) => `https://ipfs.io/ipfs/${cid}`,
-  (cid: string) => `https://cloudflare-ipfs.com/ipfs/${cid}`,
-  (cid: string) => `https://dweb.link/ipfs/${cid}`,
-];
+import { useEffect, useState } from "react";
+import { use } from "react";
+import type { EvidenceResult } from "@/app/types";
 
-async function fetchEvidence(cid: string) {
-  for (const gateway of GATEWAYS) {
-    try {
-      const res = await fetch(gateway(cid), { next: { revalidate: 3600 }, signal: AbortSignal.timeout(10000) });
-      if (res.ok) return await res.json();
-    } catch { continue; }
-  }
-  return null;
-}
 
 const SEV: Record<string, { dot: string; badge: string }> = {
   low: { dot: "bg-sky-400", badge: "border-sky-400/30 text-sky-400" },
@@ -22,12 +11,78 @@ const SEV: Record<string, { dot: string; badge: string }> = {
   high: { dot: "bg-red-500", badge: "border-red-500/30 text-red-400" },
 };
 
-export default async function EvidencePage({ params }: { params: Promise<{ cid: string }> }) {
-  const { cid } = await params;
-  const evidence = await fetchEvidence(cid);
-  if (!evidence) notFound();
+const GATEWAYS = [
+  (cid: string) => `https://ipfs.io/ipfs/${cid}`,
+  (cid: string) => `https://cloudflare-ipfs.com/ipfs/${cid}`,
+  (cid: string) => `https://dweb.link/ipfs/${cid}`,
+];
 
-  const { evidenceId, capturedAt, sourceUrl, analysis, screenshotCid } = evidence;
+async function fetchFromGateways(cid: string): Promise<EvidenceResult | null> {
+  for (const gateway of GATEWAYS) {
+    try {
+      const res = await fetch(gateway(cid), { signal: AbortSignal.timeout(15000) });
+      if (res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json") || contentType.includes("text")) {
+          const data = await res.json();
+          if (data?.evidenceId) return data;
+        }
+      }
+    } catch { continue; }
+  }
+  return null;
+}
+
+export default function EvidencePage({ params }: { params: Promise<{ cid: string }> }) {
+  const { cid } = use(params);
+  const [evidence, setEvidence] = useState<EvidenceResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<"cache" | "gateway" | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      // Check localStorage first
+      try {
+        const stored = localStorage.getItem("evidence-history");
+        if (stored) {
+          const history: EvidenceResult[] = JSON.parse(stored);
+          const cached = history.find((h) => h.cid === cid);
+          if (cached) { setEvidence(cached); setSource("cache"); setLoading(false); return; }
+        }
+      } catch { /* ignore parse errors */ }
+
+      // Fall back to IPFS gateways
+      const data = await fetchFromGateways(cid);
+      if (data) { setEvidence(data); setSource("gateway"); }
+      setLoading(false);
+    }
+    load();
+  }, [cid]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0c0c0c] text-white flex items-center justify-center" style={{ fontFamily: "var(--font-geist-sans, system-ui, sans-serif)" }}>
+        <div className="text-center space-y-3">
+          <div className="w-5 h-5 border border-white/20 border-t-white/60 rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-white/40">Retrieving evidence from Filecoin...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!evidence) {
+    return (
+      <div className="min-h-screen bg-[#0c0c0c] text-white flex items-center justify-center" style={{ fontFamily: "var(--font-geist-sans, system-ui, sans-serif)" }}>
+        <div className="text-center space-y-3 max-w-sm px-6">
+          <p className="text-sm font-medium text-white/60">Evidence not found</p>
+          <p className="text-xs text-white/30">This CID could not be retrieved from any IPFS gateway. Content may still be propagating — try again in a few minutes.</p>
+          <code className="block text-[10px] text-white/20 font-mono break-all mt-2">{cid}</code>
+        </div>
+      </div>
+    );
+  }
+
+  const { evidenceId, capturedAt, sourceUrl, fileName, analysis, screenshotCid } = evidence;
   const sev = SEV[analysis?.severity] || SEV.medium;
 
   return (
@@ -60,7 +115,6 @@ export default async function EvidencePage({ params }: { params: Promise<{ cid: 
           </div>
         </div>
 
-        {/* Screenshot */}
         {screenshotCid && (
           <div className="overflow-hidden rounded-lg border border-white/[0.07]">
             <p className="text-[10px] text-white/25 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Stored on Filecoin</p>
@@ -69,7 +123,6 @@ export default async function EvidencePage({ params }: { params: Promise<{ cid: 
           </div>
         )}
 
-        {/* Details */}
         <div className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.05]">
           <div className="grid grid-cols-2 divide-x divide-white/[0.05]">
             <Cell label="Platform" value={analysis?.platform} />
@@ -85,6 +138,9 @@ export default async function EvidencePage({ params }: { params: Promise<{ cid: 
               <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Source URL</p>
               <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-white/60 hover:text-white break-all">{sourceUrl}</a>
             </div>
+          )}
+          {fileName && !sourceUrl && (
+            <Cell label="File" value={fileName} />
           )}
           <div className="px-4 py-3">
             <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1.5">Summary</p>
@@ -116,24 +172,16 @@ export default async function EvidencePage({ params }: { params: Promise<{ cid: 
           )}
         </div>
 
-        {/* Filecoin proof */}
         <div className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.05]">
           <div className="px-4 py-3">
             <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Content ID (CID)</p>
             <code className="text-xs text-emerald-400 font-mono break-all">{cid}</code>
           </div>
-          <div className="px-4 py-3 space-y-2">
-            <p className="text-[10px] text-white/30 uppercase tracking-widest">IPFS Gateways</p>
-            {GATEWAYS.map((g, i) => (
-              <a key={i} href={g(cid)} target="_blank" rel="noopener noreferrer"
-                className="block text-[11px] text-white/40 hover:text-white transition-colors truncate">
-                {g(cid)}
-              </a>
-            ))}
-          </div>
           <div className="px-4 py-3">
             <p className="text-[10px] text-white/25 leading-relaxed">
-              The CID is a cryptographic hash of this evidence package. Any tampering would produce a different CID, making falsification detectable.
+              {source === "cache"
+                ? "Evidence retrieved from local session. CID is a cryptographic hash — any tampering produces a different CID."
+                : "The CID is a cryptographic hash of this evidence package. Any tampering would produce a different CID, making falsification detectable."}
             </p>
           </div>
         </div>
