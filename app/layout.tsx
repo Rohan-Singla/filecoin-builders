@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Evidence Locker",
-  description: "Preserve digital evidence permanently on Filecoin.",
+  title: "Verity — Permanent Proof on Filecoin",
+  description: "Preserve digital evidence permanently on Filecoin. Tamper-proof. Timestamped. Forever.",
 };
 
 export default function RootLayout({

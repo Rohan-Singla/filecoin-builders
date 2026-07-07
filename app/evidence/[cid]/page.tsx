@@ -34,10 +34,13 @@ export default async function EvidencePage({ params }: { params: Promise<{ cid: 
     <div className="min-h-screen bg-[#0c0c0c] text-white" style={{ fontFamily: "var(--font-geist-sans, system-ui, sans-serif)" }}>
       <header className="border-b border-white/[0.06] px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border border-white/20 rounded-sm flex items-center justify-center">
-            <div className="w-2 h-2 bg-white rounded-sm" />
-          </div>
-          <span className="text-sm font-semibold tracking-tight">Evidence Locker</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L21 7V17L12 22L3 17V7L12 2Z" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+            <path d="M12 8C9.79 8 8 9.79 8 12C8 14.21 9.79 16 12 16" stroke="white" strokeWidth="1.2" strokeLinecap="round" opacity="0.7"/>
+            <path d="M12 10C10.9 10 10 10.9 10 12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12C14 10.9 13.1 10 12 10Z" fill="white" opacity="0.9"/>
+            <path d="M15.5 9C14.7 8.1 13.4 7.5 12 7.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" opacity="0.5"/>
+          </svg>
+          <span className="text-sm font-semibold tracking-tight">Verity</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />

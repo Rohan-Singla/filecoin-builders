@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { EvidenceResult, Case } from "./types";
+import { Logo } from "./components/Logo";
 
 const SEVERITY_STYLE = {
   low: { dot: "bg-sky-400", label: "text-sky-400", badge: "border-sky-400/30 text-sky-400" },
@@ -170,10 +171,8 @@ export default function Home() {
       {/* Top bar */}
       <header className="border-b border-white/[0.06] px-6 h-14 flex items-center justify-between no-print">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border border-white/20 rounded-sm flex items-center justify-center">
-            <div className="w-2 h-2 bg-white rounded-sm" />
-          </div>
-          <span className="text-sm font-semibold tracking-tight">Evidence Locker</span>
+          <Logo size={22} />
+          <span className="text-sm font-semibold tracking-tight">Verity</span>
           <span className="text-[10px] text-white/20 uppercase tracking-widest border border-white/10 px-1.5 py-0.5 rounded">Beta</span>
         </div>
         <div className="flex items-center gap-3">
@@ -192,10 +191,10 @@ export default function Home() {
 
         {/* Page title */}
         <div className="mb-10 no-print">
-          <h1 className="text-2xl font-semibold tracking-tight mb-1.5">Digital Evidence Preservation</h1>
+          <h1 className="text-2xl font-semibold tracking-tight mb-1.5">Permanent proof, on Filecoin.</h1>
           <p className="text-sm text-white/40 leading-relaxed">
-            Capture, analyze, and permanently archive digital evidence on Filecoin.<br />
-            Tamper-proof. Cryptographically verifiable. Yours forever.
+            Capture and archive digital evidence before it disappears.<br />
+            Tamper-proof. Cryptographically verifiable. Retrievable forever.
           </p>
         </div>
 

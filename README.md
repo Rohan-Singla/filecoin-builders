@@ -1,8 +1,8 @@
-# Evidence Locker
+# Verity
 
-**Preserve digital evidence permanently on Filecoin. Tamper-proof. Timestamped. Forever.**
+**Permanent proof, on Filecoin.**
 
-Evidence Locker is an AI agent that captures, analyzes, and archives digital evidence on the Filecoin network. Built for harassment victims, journalists, legal teams, and anyone who needs to prove something happened online — before it disappears.
+Verity is an AI agent that captures, analyzes, and archives digital evidence on the Filecoin network. Built for harassment victims, journalists, legal teams, and anyone who needs to prove something happened online — before it disappears.
 
 ---
 
@@ -154,7 +154,7 @@ Built entirely using **Claude Code** as the AI build partner over 3 days.
 
 ## Submission
 
-**Project:** Evidence Locker  
+**Project:** Verity  
 **Category:** AI Agent that uses Filecoin  
 **Filecoin primitives:** Storage, content addressing, decentralized retrieval, agent memory on-chain  
 **Agent mechanic:** Persistent cross-session memory stored on Filecoin; every analysis builds on past evidence retrieved from the network  
