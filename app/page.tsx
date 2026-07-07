@@ -44,6 +44,8 @@ export default function Home() {
   const [memoryCid, setMemoryCid] = useState<string | null>(null);
   const [memoryCount, setMemoryCount] = useState(0);
   const [memoryData, setMemoryData] = useState<object | null>(null);
+  const [memoryChain, setMemoryChain] = useState<{ version: number; cid: string; updatedAt: string; totalEvidence: number }[]>([]);
+  const [memoryChainOpen, setMemoryChainOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,19 +60,27 @@ export default function Home() {
     if (mc) setMemoryCount(parseInt(mc));
     const md = localStorage.getItem("agent-memory-data");
     if (md) setMemoryData(JSON.parse(md));
+    const mh = localStorage.getItem("agent-memory-chain");
+    if (mh) setMemoryChain(JSON.parse(mh));
   }, []);
 
   function saveHistory(items: EvidenceResult[]) { setHistory(items); localStorage.setItem("evidence-history", JSON.stringify(items)); }
   function saveCases(items: Case[]) { setCases(items); localStorage.setItem("evidence-cases", JSON.stringify(items)); }
   function addToHistory(item: EvidenceResult) { saveHistory([item, ...history]); }
 
-  function saveMemory(cid: string, count: number, data: object) {
+  function saveMemory(cid: string, count: number, data: object & { version?: number; updatedAt?: string; totalEvidence?: number }) {
     setMemoryCid(cid);
     setMemoryCount(count);
     setMemoryData(data);
     localStorage.setItem("agent-memory-cid", cid);
     localStorage.setItem("agent-memory-count", String(count));
     localStorage.setItem("agent-memory-data", JSON.stringify(data));
+    const entry = { version: data.version ?? count, cid, updatedAt: data.updatedAt ?? new Date().toISOString(), totalEvidence: data.totalEvidence ?? count };
+    setMemoryChain((prev) => {
+      const next = [...prev.filter((e) => e.cid !== cid), entry].sort((a, b) => a.version - b.version);
+      localStorage.setItem("agent-memory-chain", JSON.stringify(next));
+      return next;
+    });
   }
 
   async function handlePreserve(e: React.FormEvent) {
@@ -174,178 +184,210 @@ export default function Home() {
   const caseEvidence = selectedCase ? history.filter((h) => selectedCase.evidenceIds.includes(h.evidenceId)) : [];
 
   return (
-    <div className="min-h-screen bg-[#0c0c0c] text-white">
-      {/* Top bar */}
-      <header className="border-b border-white/[0.06] px-6 h-14 flex items-center justify-between no-print">
+    <div className="min-h-screen bg-[#0c0c0c] text-white flex flex-col">
+
+      {/* ===== HEADER ===== */}
+      <header className="sticky top-0 z-20 bg-[#0c0c0c] border-b border-white/[0.06] h-14 no-print shrink-0">
+        <div className="max-w-[1280px] mx-auto px-5 h-full flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Logo size={22} />
+          <Logo size={20} />
           <span className="text-sm font-semibold tracking-tight">Verity</span>
-          <span className="text-[10px] text-white/20 uppercase tracking-widest border border-white/10 px-1.5 py-0.5 rounded">Beta</span>
+          <span className="text-xs text-white/40 uppercase tracking-widest border border-white/10 px-1.5 py-0.5 rounded hidden sm:inline">Beta</span>
         </div>
         <div className="flex items-center gap-3">
           {memoryCid && (
-            <a href={`https://ipfs.io/ipfs/${memoryCid}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Memory: {memoryCount} items
-            </a>
+            <button onClick={() => setMemoryChainOpen((o) => !o)}
+              className="flex items-center gap-1.5 text-sm text-white/60 hover:text-white transition-colors">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+              <span className="hidden sm:inline">Memory: {memoryCount} items</span>
+              <span className="sm:hidden text-xs">Mem</span>
+              <span className="text-white/40 text-xs">{memoryChainOpen ? "▲" : "▼"}</span>
+            </button>
           )}
-          <span className="text-xs text-white/20">Filecoin</span>
+          <span className="text-sm text-white/50 hidden sm:inline">Filecoin</span>
+        </div>
         </div>
       </header>
 
-      <div className="max-w-[680px] mx-auto px-6 py-12">
+      {/* ===== SPLIT BODY ===== */}
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 max-w-[1280px] mx-auto w-full">
 
-        {/* Page title */}
-        <div className="mb-10 no-print">
-          <h1 className="text-2xl font-semibold tracking-tight mb-1.5">Permanent proof, on Filecoin.</h1>
-          <p className="text-sm text-white/40 leading-relaxed">
-            Capture and archive digital evidence before it disappears.<br />
-            Tamper-proof. Cryptographically verifiable. Retrievable forever.
-          </p>
-        </div>
+        {/* ===== LEFT PANEL — input / navigation ===== */}
+        <div className="w-full lg:w-[400px] xl:w-[440px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.06] lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
+          <div className="p-5 lg:p-6">
 
-        {/* Tabs */}
-        <div className="flex gap-0 border-b border-white/[0.07] mb-8 no-print">
-          {(["preserve", "verify", "cases"] as const).map((tab) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2.5 text-sm capitalize transition-colors border-b-2 -mb-px ${activeTab === tab ? "border-white text-white font-medium" : "border-transparent text-white/40 hover:text-white/70"}`}>
-              {tab === "preserve" ? "Preserve" : tab === "verify" ? "Verify CID" : "Cases"}
-            </button>
-          ))}
-        </div>
+            {/* Title */}
+            <div className="mb-7 no-print">
+              <h1 className="text-xl font-semibold tracking-tight mb-1.5">Permanent proof, on Filecoin.</h1>
+              <p className="text-sm text-white/60 leading-relaxed">
+                Capture and archive digital evidence.<br />
+                Tamper-proof. Cryptographically verifiable.
+              </p>
+            </div>
 
-        {/* ===== PRESERVE ===== */}
-        {activeTab === "preserve" && (
-          <div>
-            <div className="flex gap-2 mb-6">
-              {(["url", "file", "batch"] as const).map((m) => (
-                <button key={m} onClick={() => { setPreserveMode(m); setFile(null); setResult(null); setError(""); setBatchResults([]); }}
-                  className={`px-3 py-1.5 text-xs rounded-md transition-colors font-medium ${preserveMode === m ? "bg-white text-black" : "bg-white/[0.06] text-white/50 hover:text-white/80 hover:bg-white/[0.09]"}`}>
-                  {m === "url" ? "URL" : m === "file" ? "File Upload" : "Batch"}
+            {/* Tabs */}
+            <div className="flex border-b border-white/[0.07] mb-6 no-print">
+              {(["preserve", "verify", "cases"] as const).map((tab) => (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2.5 text-sm transition-colors border-b-2 -mb-px ${activeTab === tab ? "border-white text-white font-medium" : "border-transparent text-white/50 hover:text-white/80"}`}>
+                  {tab === "preserve" ? "Preserve" : tab === "verify" ? "Verify CID" : "Cases"}
                 </button>
               ))}
             </div>
 
-            {/* URL */}
-            {preserveMode === "url" && (
-              <form onSubmit={handlePreserve} className="space-y-3 mb-6">
-                <Field label="URL to preserve">
-                  <input type="url" value={url} onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://" disabled={loading} required
-                    className="input-base" />
-                </Field>
-                <Field label="Context" hint="optional">
-                  <input type="text" value={context} onChange={(e) => setContext(e.target.value)}
-                    placeholder="e.g. harassment, scam, broken contract..." disabled={loading}
-                    className="input-base" />
-                </Field>
-                <PrimaryButton loading={loading} step={step} label="Preserve Evidence" disabled={!url.trim()} />
-              </form>
-            )}
-
-            {/* File */}
-            {preserveMode === "file" && (
-              <form onSubmit={handlePreserve} className="space-y-3 mb-6">
-                <div onClick={() => fileInputRef.current?.click()}
-                  className={`border border-dashed rounded-lg px-5 py-10 text-center cursor-pointer transition-colors ${file ? "border-white/30 bg-white/[0.03]" : "border-white/10 hover:border-white/20"}`}>
-                  {file ? (
-                    <div>
-                      <p className="text-sm font-medium text-white">{file.name}</p>
-                      <p className="text-xs text-white/40 mt-1">{(file.size / 1024).toFixed(1)} KB &middot; {file.type || "unknown"}</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-sm text-white/50">Click to select a file</p>
-                      <p className="text-xs text-white/25 mt-1">Screenshots, PDFs, images, documents</p>
-                    </div>
-                  )}
-                  <input ref={fileInputRef} type="file" className="hidden"
-                    accept="image/*,.pdf,.txt,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} disabled={loading} />
+            {/* ===== PRESERVE form ===== */}
+            {activeTab === "preserve" && (
+              <div>
+                <div className="flex gap-2 mb-5">
+                  {(["url", "file", "batch"] as const).map((m) => (
+                    <button key={m} onClick={() => { setPreserveMode(m); setFile(null); setResult(null); setError(""); setBatchResults([]); }}
+                      className={`px-3 py-1.5 text-xs rounded-md transition-colors font-medium ${preserveMode === m ? "bg-white text-black" : "bg-white/[0.06] text-white/60 hover:text-white hover:bg-white/[0.09]"}`}>
+                      {m === "url" ? "URL" : m === "file" ? "File" : "Batch"}
+                    </button>
+                  ))}
                 </div>
-                <Field label="Context" hint="optional">
-                  <input type="text" value={context} onChange={(e) => setContext(e.target.value)}
-                    placeholder="e.g. harassment, scam..." disabled={loading} className="input-base" />
-                </Field>
-                <PrimaryButton loading={loading} step={step} label="Upload and Preserve" disabled={!file} />
-              </form>
-            )}
 
-            {/* Batch */}
-            {preserveMode === "batch" && (
-              <form onSubmit={handleBatch} className="space-y-3 mb-6">
-                <Field label="URLs" hint="one per line">
-                  <textarea value={batchUrls} onChange={(e) => setBatchUrls(e.target.value)}
-                    placeholder={"https://example.com/post-1\nhttps://example.com/post-2"}
-                    className="input-base resize-none" rows={5} disabled={loading} />
-                </Field>
-                <Field label="Context" hint="optional">
-                  <input type="text" value={context} onChange={(e) => setContext(e.target.value)}
-                    placeholder="e.g. harassment thread..." disabled={loading} className="input-base" />
-                </Field>
-                <PrimaryButton loading={loading} step={step} label="Preserve All" disabled={!batchUrls.trim()} />
-                {loading && batchProgress.total > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs text-white/30">
-                      <span>Progress</span>
-                      <span>{batchProgress.current} / {batchProgress.total}</span>
+                {preserveMode === "url" && (
+                  <form onSubmit={handlePreserve} className="space-y-3">
+                    <Field label="URL to preserve">
+                      <input type="url" value={url} onChange={(e) => setUrl(e.target.value)}
+                        placeholder="https://" disabled={loading} required className="input-base" />
+                    </Field>
+                    <Field label="Context" hint="optional">
+                      <input type="text" value={context} onChange={(e) => setContext(e.target.value)}
+                        placeholder="e.g. harassment, scam..." disabled={loading} className="input-base" />
+                    </Field>
+                    <PrimaryButton loading={loading} step={step} label="Preserve Evidence" disabled={!url.trim()} />
+                  </form>
+                )}
+
+                {preserveMode === "file" && (
+                  <form onSubmit={handlePreserve} className="space-y-3">
+                    <div onClick={() => fileInputRef.current?.click()}
+                      className={`border border-dashed rounded-lg px-5 py-8 text-center cursor-pointer transition-colors ${file ? "border-white/30 bg-white/[0.03]" : "border-white/10 hover:border-white/20"}`}>
+                      {file ? (
+                        <div>
+                          <p className="text-sm font-medium text-white">{file.name}</p>
+                          <p className="text-xs text-white/40 mt-1">{(file.size / 1024).toFixed(1)} KB &middot; {file.type || "unknown"}</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm text-white/70">Click to select a file</p>
+                          <p className="text-xs text-white/40 mt-1">Screenshots, PDFs, images, documents</p>
+                        </div>
+                      )}
+                      <input ref={fileInputRef} type="file" className="hidden"
+                        accept="image/*,.pdf,.txt,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] || null)} disabled={loading} />
                     </div>
-                    <div className="h-px bg-white/10 rounded-full overflow-hidden">
-                      <div className="h-px bg-white transition-all duration-300" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }} />
+                    <Field label="Context" hint="optional">
+                      <input type="text" value={context} onChange={(e) => setContext(e.target.value)}
+                        placeholder="e.g. harassment, scam..." disabled={loading} className="input-base" />
+                    </Field>
+                    <PrimaryButton loading={loading} step={step} label="Upload and Preserve" disabled={!file} />
+                  </form>
+                )}
+
+                {preserveMode === "batch" && (
+                  <form onSubmit={handleBatch} className="space-y-3">
+                    <Field label="URLs" hint="one per line">
+                      <textarea value={batchUrls} onChange={(e) => setBatchUrls(e.target.value)}
+                        placeholder={"https://example.com/post-1\nhttps://example.com/post-2"}
+                        className="input-base resize-none" rows={5} disabled={loading} />
+                    </Field>
+                    <Field label="Context" hint="optional">
+                      <input type="text" value={context} onChange={(e) => setContext(e.target.value)}
+                        placeholder="e.g. harassment thread..." disabled={loading} className="input-base" />
+                    </Field>
+                    <PrimaryButton loading={loading} step={step} label="Preserve All" disabled={!batchUrls.trim()} />
+                    {loading && batchProgress.total > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs text-white/50">
+                          <span>Progress</span>
+                          <span>{batchProgress.current} / {batchProgress.total}</span>
+                        </div>
+                        <div className="h-px bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-px bg-white transition-all duration-300" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </form>
+                )}
+
+                {error && <div className="mt-4"><ErrorMsg message={error} /></div>}
+
+                {/* History list */}
+                {history.length > 0 && (
+                  <div className="mt-8">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs text-white/60 uppercase tracking-widest font-medium">History</p>
+                      <span className="text-xs text-white/40">{history.length} items</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {history.map((item) => {
+                        const sev = SEVERITY_STYLE[item.analysis.severity as SeverityKey] || SEVERITY_STYLE.medium;
+                        return (
+                          <div key={item.evidenceId} onClick={() => setResult(item)}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${result?.evidenceId === item.evidenceId ? "bg-white/[0.07]" : "hover:bg-white/[0.03]"}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sev.dot}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-white/80 truncate">{item.fileName || item.sourceUrl}</p>
+                              <p className="text-xs text-white/50 mt-0.5">{item.analysis.platform} &middot; {new Date(item.capturedAt).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
-              </form>
-            )}
-
-            {error && <ErrorMsg message={error} />}
-
-            {/* Batch results */}
-            {batchResults.length > 0 && (
-              <div className="mb-8 space-y-2">
-                <p className="text-xs text-white/40 mb-3">{batchResults.length} items preserved</p>
-                {batchResults.map((r) => (
-                  <div key={r.evidenceId} className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.07] bg-white/[0.02]">
-                    <div className="min-w-0">
-                      <p className="text-xs text-white truncate">{r.sourceUrl}</p>
-                      <p className="text-[10px] text-white/30 font-mono truncate mt-0.5">{r.cid}</p>
-                    </div>
-                    <a href={`/evidence/${r.cid}`} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 text-xs text-white/50 hover:text-white border border-white/10 hover:border-white/20 rounded px-2.5 py-1 transition-colors">
-                      View
-                    </a>
-                  </div>
-                ))}
               </div>
             )}
 
-            {/* Certificate */}
-            {result && (
-              <Certificate result={result} cases={cases} copied={copied}
-                onCopy={copyText} onDownload={downloadCert}
-                assignCaseId={assignCaseId} onAssignCaseChange={setAssignCaseId}
-                onAssign={() => { if (assignCaseId) assignToCase(result.evidenceId, assignCaseId); }} />
+            {/* ===== VERIFY form ===== */}
+            {activeTab === "verify" && (
+              <div>
+                <p className="text-sm text-white/60 mb-5 leading-relaxed">
+                  Paste any CID to confirm evidence exists on Filecoin.
+                </p>
+                <form onSubmit={handleVerify} className="space-y-3">
+                  <Field label="Content ID (CID)">
+                    <input value={verifyCid} onChange={(e) => setVerifyCid(e.target.value)}
+                      placeholder="bafkrei..." disabled={verifyLoading}
+                      className="input-base font-mono text-xs" />
+                  </Field>
+                  <PrimaryButton loading={verifyLoading} step="Verifying..." label="Verify" disabled={!verifyCid.trim()} />
+                </form>
+                {verifyError && <div className="mt-4"><ErrorMsg message={verifyError} /></div>}
+              </div>
             )}
 
-            {/* History */}
-            {history.length > 0 && (
-              <div className="mt-12">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs text-white/30 uppercase tracking-widest font-medium">History</p>
-                  <span className="text-xs text-white/20">{history.length} items</span>
+            {/* ===== CASES list ===== */}
+            {activeTab === "cases" && (
+              <div>
+                <div className="flex gap-2 mb-5">
+                  <input value={newCaseName} onChange={(e) => setNewCaseName(e.target.value)}
+                    placeholder="New case name" onKeyDown={(e) => e.key === "Enter" && createCase()}
+                    className="input-base flex-1" />
+                  <button onClick={createCase} className="px-4 py-2 text-sm bg-white text-black font-medium rounded-md hover:bg-white/90 transition-colors shrink-0">
+                    Create
+                  </button>
                 </div>
+
+                {cases.length === 0 && (
+                  <p className="text-sm text-white/50 text-center py-12">No cases yet.</p>
+                )}
+
                 <div className="space-y-1">
-                  {history.map((item) => {
-                    const sev = SEVERITY_STYLE[item.analysis.severity as SeverityKey] || SEVERITY_STYLE.medium;
+                  {cases.map((c) => {
+                    const isSelected = selectedCaseId === c.id;
                     return (
-                      <div key={item.evidenceId} onClick={() => setResult(item)}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${result?.evidenceId === item.evidenceId ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sev.dot}`} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-white/80 truncate">{item.fileName || item.sourceUrl}</p>
-                          <p className="text-xs text-white/25 mt-0.5">{item.analysis.platform} &middot; {new Date(item.capturedAt).toLocaleDateString()}</p>
+                      <div key={c.id}
+                        onClick={() => setSelectedCaseId(isSelected ? null : c.id)}
+                        className={`flex items-center justify-between px-3 py-3 rounded-lg cursor-pointer transition-colors ${isSelected ? "bg-white/[0.07]" : "hover:bg-white/[0.03]"}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{c.name}</p>
+                          <p className="text-xs text-white/50 mt-0.5">{c.evidenceIds.length} items &middot; {new Date(c.createdAt).toLocaleDateString()}</p>
                         </div>
-                        <p className="text-[10px] text-white/20 font-mono shrink-0 hidden sm:block">{item.cid.slice(0, 12)}...</p>
+                        <span className="text-white/40 text-sm shrink-0 ml-2">{isSelected ? "←" : "→"}</span>
                       </div>
                     );
                   })}
@@ -353,128 +395,176 @@ export default function Home() {
               </div>
             )}
           </div>
-        )}
+        </div>
 
-        {/* ===== VERIFY ===== */}
-        {activeTab === "verify" && (
-          <div>
-            <p className="text-sm text-white/40 mb-6 leading-relaxed">
-              Paste any CID to confirm the evidence exists on Filecoin and retrieve its certificate.
-            </p>
-            <form onSubmit={handleVerify} className="space-y-3 mb-6">
-              <Field label="Content ID (CID)">
-                <input value={verifyCid} onChange={(e) => setVerifyCid(e.target.value)}
-                  placeholder="bafkrei..." disabled={verifyLoading}
-                  className="input-base font-mono text-xs" />
-              </Field>
-              <PrimaryButton loading={verifyLoading} step="Verifying..." label="Verify" disabled={!verifyCid.trim()} />
-            </form>
+        {/* ===== RIGHT PANEL — results / certificates ===== */}
+        <div className="flex-1 lg:overflow-y-auto">
+          <div className="p-5 lg:p-8 max-w-[680px]">
 
-            {verifyError && <ErrorMsg message={verifyError} />}
-
-            {verifyResult && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05]">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-emerald-400">Verified on Filecoin</p>
-                    <p className="text-xs text-white/30 mt-0.5 break-all">
-                      {verifyResult.gatewayUsed === "local-cache" ? "Served from local session cache — CID matches archived evidence" : verifyResult.gatewayUsed}
-                    </p>
-                  </div>
+            {/* Memory chain panel */}
+            {memoryChainOpen && memoryChain.length > 0 && (
+              <div className="mb-8 p-5 rounded-xl border border-white/[0.07] bg-white/[0.01] no-print">
+                <p className="text-xs text-white/60 uppercase tracking-widest mb-4 font-medium">Agent Memory — Filecoin Knowledge Trail</p>
+                <div className="space-y-2.5">
+                  {memoryChain.map((entry, i) => (
+                    <div key={entry.cid} className="flex items-center gap-3">
+                      <span className="text-xs text-white/50 w-6 shrink-0 font-mono">v{entry.version}</span>
+                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                        <code className="text-xs text-emerald-400 font-mono truncate">{entry.cid}</code>
+                        {i === memoryChain.length - 1 && (
+                          <span className="text-xs text-emerald-400 border border-emerald-400/40 px-1.5 py-0.5 rounded shrink-0">current</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-white/50 shrink-0">{entry.totalEvidence} item{entry.totalEvidence !== 1 ? "s" : ""}</span>
+                      <a href={`https://cid.ipfs.tech/#${entry.cid}`} target="_blank" rel="noopener noreferrer"
+                        className="text-sm text-white/40 hover:text-white transition-colors shrink-0">↗</a>
+                    </div>
+                  ))}
                 </div>
-                {verifyResult.isRawFile ? (
-                  <div className="p-4 rounded-lg border border-white/[0.07]">
-                    <p className="text-sm text-white">Raw file — {verifyResult.contentType}</p>
-                    <a href={verifyResult.gatewayUsed} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-white/40 hover:text-white mt-2 block">View file on IPFS</a>
-                  </div>
-                ) : verifyResult.data ? (
-                  <Certificate result={verifyResult.data as EvidenceResult} cases={[]} copied={copied}
-                    onCopy={copyText} onDownload={downloadCert}
-                    assignCaseId="" onAssignCaseChange={() => {}} onAssign={() => {}} />
-                ) : null}
+                <p className="text-xs text-white/40 mt-4">Each version is a permanent, immutable snapshot stored on Filecoin.</p>
               </div>
             )}
-          </div>
-        )}
 
-        {/* ===== CASES ===== */}
-        {activeTab === "cases" && (
-          <div>
-            <div className="flex gap-2 mb-6">
-              <input value={newCaseName} onChange={(e) => setNewCaseName(e.target.value)}
-                placeholder="New case name" onKeyDown={(e) => e.key === "Enter" && createCase()}
-                className="input-base flex-1" />
-              <button onClick={createCase} className="px-4 py-2 text-sm bg-white text-black font-medium rounded-md hover:bg-white/90 transition-colors shrink-0">
-                Create
-              </button>
-            </div>
+            {/* ===== PRESERVE right: certificate or empty ===== */}
+            {activeTab === "preserve" && (
+              <>
+                {batchResults.length > 0 && (
+                  <div className="mb-8 space-y-2">
+                    <p className="text-xs text-white/60 mb-3">{batchResults.length} items preserved</p>
+                    {batchResults.map((r) => (
+                      <div key={r.evidenceId} className="flex items-center justify-between gap-4 p-3 rounded-lg border border-white/[0.07] bg-white/[0.02]">
+                        <div className="min-w-0">
+                          <p className="text-xs text-white truncate">{r.sourceUrl}</p>
+                          <p className="text-xs text-white/40 font-mono truncate mt-0.5">{r.cid}</p>
+                        </div>
+                        <a href={`/evidence/${r.cid}`} target="_blank" rel="noopener noreferrer"
+                          className="shrink-0 text-xs text-white/50 hover:text-white border border-white/10 hover:border-white/20 rounded px-2.5 py-1 transition-colors">
+                          View
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-            {cases.length === 0 && (
-              <p className="text-sm text-white/25 text-center py-16">No cases yet. Create one to group related evidence.</p>
+                {result ? (
+                  <Certificate result={result} cases={cases} copied={copied}
+                    onCopy={copyText} onDownload={downloadCert}
+                    assignCaseId={assignCaseId} onAssignCaseChange={setAssignCaseId}
+                    onAssign={() => { if (assignCaseId) assignToCase(result.evidenceId, assignCaseId); }} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mb-4">
+                      <div className="w-4 h-4 rounded-full border-2 border-white/20" />
+                    </div>
+                    <p className="text-sm text-white/40 mb-1">No evidence yet</p>
+                    <p className="text-xs text-white/25">Preserve a URL or file to see the certificate here.</p>
+                  </div>
+                )}
+              </>
             )}
 
-            <div className="space-y-2">
-              {cases.map((c) => {
-                const ev = history.filter((h) => c.evidenceIds.includes(h.evidenceId));
-                const isOpen = selectedCaseId === c.id;
-                return (
-                  <div key={c.id} className="rounded-lg border border-white/[0.07] overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
-                      onClick={() => setSelectedCaseId(isOpen ? null : c.id)}>
+            {/* ===== VERIFY right: result or empty ===== */}
+            {activeTab === "verify" && (
+              <>
+                {verifyResult ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05]">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                       <div>
-                        <p className="text-sm font-medium text-white">{c.name}</p>
-                        <p className="text-xs text-white/25 mt-0.5">{c.evidenceIds.length} items &middot; {new Date(c.createdAt).toLocaleDateString()}</p>
+                        <p className="text-sm font-medium text-emerald-400">Verified on Filecoin</p>
+                        <p className="text-xs text-white/50 mt-0.5 break-all">
+                          {verifyResult.gatewayUsed === "local-cache" ? "Served from local session cache — CID matches archived evidence" : verifyResult.gatewayUsed}
+                        </p>
                       </div>
-                      <span className="text-white/20 text-xs">{isOpen ? "collapse" : "expand"}</span>
+                    </div>
+                    {verifyResult.isRawFile ? (
+                      <div className="p-4 rounded-lg border border-white/[0.07]">
+                        <p className="text-sm text-white">Raw file — {verifyResult.contentType}</p>
+                        <a href={verifyResult.gatewayUsed} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-white/40 hover:text-white mt-2 block">View file on IPFS</a>
+                      </div>
+                    ) : verifyResult.data ? (
+                      <Certificate result={verifyResult.data as EvidenceResult} cases={[]} copied={copied}
+                        onCopy={copyText} onDownload={downloadCert}
+                        assignCaseId="" onAssignCaseChange={() => {}} onAssign={() => {}} />
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mb-4">
+                      <div className="w-4 h-4 rounded-full border-2 border-white/20" />
+                    </div>
+                    <p className="text-sm text-white/40 mb-1">Enter a CID to verify</p>
+                    <p className="text-xs text-white/25">Paste a Content ID on the left to retrieve its certificate.</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ===== CASES right: selected case detail or empty ===== */}
+            {activeTab === "cases" && (
+              <>
+                {selectedCase ? (
+                  <div className="space-y-6">
+                    <div>
+                      <h2 className="text-lg font-semibold text-white">{selectedCase.name}</h2>
+                      <p className="text-xs text-white/50 mt-1">{selectedCase.evidenceIds.length} items &middot; Created {new Date(selectedCase.createdAt).toLocaleDateString()}</p>
                     </div>
 
-                    {isOpen && (
-                      <div className="border-t border-white/[0.07] p-4 space-y-4">
-                        {ev.length === 0 ? (
-                          <p className="text-xs text-white/30">No evidence assigned. Preserve something and assign it from the certificate.</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {ev.map((item) => (
-                              <div key={item.evidenceId} className="flex items-center gap-3 p-2.5 rounded-md bg-white/[0.03]">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs text-white truncate">{item.fileName || item.sourceUrl}</p>
-                                  <p className="text-[10px] text-white/25 mt-0.5">{new Date(item.capturedAt).toLocaleString()}</p>
-                                </div>
-                                <div className="flex gap-2 shrink-0">
-                                  <a href={`/evidence/${item.cid}`} target="_blank" rel="noopener noreferrer"
-                                    className="text-[10px] text-white/40 hover:text-white border border-white/10 rounded px-2 py-1 transition-colors">View</a>
-                                  <button onClick={() => removeFromCase(item.evidenceId, c.id)}
-                                    className="text-[10px] text-red-400/60 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 rounded px-2 py-1 transition-colors">Remove</button>
-                                </div>
+                    {caseEvidence.length === 0 ? (
+                      <p className="text-sm text-white/50 py-8">No evidence assigned. Preserve something and assign it from the certificate.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {caseEvidence.map((item) => {
+                          const sev = SEVERITY_STYLE[item.analysis.severity as SeverityKey] || SEVERITY_STYLE.medium;
+                          return (
+                            <div key={item.evidenceId} className="flex items-center gap-3 p-3 rounded-lg border border-white/[0.07] bg-white/[0.02]">
+                              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sev.dot}`} />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm text-white truncate">{item.fileName || item.sourceUrl}</p>
+                                <p className="text-xs text-white/50 mt-0.5">{item.analysis.platform} &middot; {new Date(item.capturedAt).toLocaleString()}</p>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              <div className="flex gap-2 shrink-0">
+                                <a href={`/evidence/${item.cid}`} target="_blank" rel="noopener noreferrer"
+                                  className="text-xs text-white/60 hover:text-white border border-white/10 rounded px-2 py-1 transition-colors">View</a>
+                                <button onClick={() => removeFromCase(item.evidenceId, selectedCase.id)}
+                                  className="text-xs text-red-400/80 hover:text-red-400 border border-red-500/10 hover:border-red-500/30 rounded px-2 py-1 transition-colors">Remove</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                        {ev.length >= 2 && (
-                          <div>
-                            <button onClick={() => buildTimeline(c)} disabled={timelineLoading}
-                              className="w-full py-2.5 text-sm font-medium rounded-md border border-white/10 hover:border-white/20 hover:bg-white/[0.03] transition-colors disabled:opacity-40">
-                              {timelineLoading ? "Building timeline..." : "Build AI Timeline"}
-                            </button>
-                            {timeline && selectedCaseId === c.id && (
-                              <div className="mt-3 p-4 rounded-md bg-white/[0.03] border border-white/[0.07]">
-                                <p className="text-[10px] text-white/30 uppercase tracking-widest mb-3 font-medium">AI Case Timeline</p>
-                                <pre className="text-xs text-white/70 whitespace-pre-wrap leading-relaxed font-sans">{timeline}</pre>
-                              </div>
-                            )}
+                    {caseEvidence.length >= 2 && (
+                      <div>
+                        <button onClick={() => buildTimeline(selectedCase)} disabled={timelineLoading}
+                          className="w-full py-2.5 text-sm font-medium rounded-md border border-white/10 hover:border-white/20 hover:bg-white/[0.03] transition-colors disabled:opacity-40">
+                          {timelineLoading ? "Building timeline..." : "Build AI Timeline"}
+                        </button>
+                        {timeline && (
+                          <div className="mt-4 p-5 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+                            <p className="text-xs text-white/50 uppercase tracking-widest mb-3 font-medium">AI Case Timeline</p>
+                            <pre className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed font-sans">{timeline}</pre>
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mb-4">
+                      <div className="w-4 h-4 rounded-full border-2 border-white/20" />
+                    </div>
+                    <p className="text-sm text-white/40 mb-1">No case selected</p>
+                    <p className="text-xs text-white/25">Select a case on the left to view its evidence.</p>
+                  </div>
+                )}
+              </>
+            )}
+
           </div>
-        )}
+        </div>
       </div>
 
       <style jsx global>{`
@@ -489,26 +579,26 @@ export default function Home() {
           outline: none;
           transition: border-color 0.15s;
         }
-        .input-base::placeholder { color: rgba(255,255,255,0.2); }
+        .input-base::placeholder { color: rgba(255,255,255,0.35); }
         .input-base:focus { border-color: rgba(255,255,255,0.25); }
         .input-base:disabled { opacity: 0.4; }
       `}</style>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.06] mt-16 px-6 py-8 no-print">
-        <div className="max-w-[680px] mx-auto flex items-center justify-between gap-6">
+      <footer className="border-t border-white/[0.06] px-6 py-6 no-print shrink-0">
+        <div className="max-w-[1280px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <p className="text-xs text-white/50">Built for the Filecoin TLDR Builder Challenge</p>
-            <p className="text-[11px] text-white/25 mt-0.5">AI agent memory + permanent evidence on Filecoin</p>
+            <p className="text-xs text-white/40 mt-0.5">AI agent memory + permanent evidence on Filecoin</p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
             <a href="https://x.com/rohanbuilds" target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-white/30 hover:text-white transition-colors">X</a>
+              className="text-sm text-white/60 hover:text-white transition-colors">X</a>
             <a href="https://github.com/rohan-singla" target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-white/30 hover:text-white transition-colors">GitHub</a>
+              className="text-sm text-white/60 hover:text-white transition-colors">GitHub</a>
             <a href="https://www.linkedin.com/in/rohan-singla100/" target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-white/30 hover:text-white transition-colors">LinkedIn</a>
-            <span className="text-[11px] text-white/15">Rohan Singla</span>
+              className="text-sm text-white/60 hover:text-white transition-colors">LinkedIn</a>
+            <span className="text-sm text-white/50">Rohan Singla</span>
           </div>
         </div>
       </footer>
@@ -523,7 +613,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <div className="space-y-1.5">
       <label className="flex items-center gap-2 text-xs text-white/50">
         {label}
-        {hint && <span className="text-white/20">{hint}</span>}
+        {hint && <span className="text-white/40">{hint}</span>}
       </label>
       {children}
     </div>
@@ -533,7 +623,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 function PrimaryButton({ loading, step, label, disabled }: { loading: boolean; step: string; label: string; disabled: boolean }) {
   return (
     <button type="submit" disabled={loading || disabled}
-      className="w-full py-2.5 text-sm font-medium rounded-md bg-white text-black hover:bg-white/90 disabled:bg-white/10 disabled:text-white/20 transition-colors">
+      className="w-full py-2.5 text-sm font-medium rounded-md bg-white text-black hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40 transition-colors">
       {loading ? step || "Working..." : label}
     </button>
   );
@@ -552,13 +642,25 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
 }) {
   const sev = SEVERITY_STYLE[result.analysis.severity as SeverityKey] || SEVERITY_STYLE.medium;
   const { analysis } = result;
+  const [proofData, setProofData] = useState<{ fileName: string; fileSize: number; mimeType: string; txHash?: string } | null>(null);
+  const [proofLoading, setProofLoading] = useState(false);
+
+  async function fetchProof() {
+    if (proofData || proofLoading) return;
+    setProofLoading(true);
+    try {
+      const res = await fetch("/api/filecoin-proof", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cid: result.cid }) });
+      const data = await res.json();
+      if (res.ok && data.info) setProofData(data.info);
+    } finally { setProofLoading(false); }
+  }
 
   return (
-    <div className="space-y-3 mt-6">
+    <div className="space-y-3">
       {/* Certificate header */}
       <div className="flex items-start justify-between gap-4 p-4 rounded-lg border border-white/[0.07] bg-white/[0.02]">
         <div>
-          <p className="text-[10px] text-white/40 uppercase tracking-widest font-medium mb-1">Evidence Certificate</p>
+          <p className="text-xs text-white/60 uppercase tracking-widest font-medium mb-1">Evidence Certificate</p>
           <p className="text-xs text-white/50 font-mono">{result.evidenceId}</p>
         </div>
         <div className={`flex items-center gap-1.5 shrink-0 text-xs font-medium px-2 py-1 rounded border ${sev.badge}`}>
@@ -570,7 +672,7 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       {/* Screenshot */}
       {(result.screenshotUrl || result.screenshotCid) && (
         <div className="overflow-hidden rounded-lg border border-white/[0.07]">
-          <p className="text-[10px] text-white/40 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Filecoin</p>
+          <p className="text-xs text-white/60 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Filecoin</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={result.screenshotUrl || `https://ipfs.io/ipfs/${result.screenshotCid}`} alt="Evidence screenshot" className="w-full" />
         </div>
@@ -589,17 +691,17 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
         <DetailCell label="Captured (UTC)" value={new Date(result.capturedAt).toUTCString()} />
         {result.sourceUrl && (
           <div className="px-4 py-3">
-            <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">Source URL</p>
+            <p className="text-xs text-white/60 uppercase tracking-widest mb-1">Source URL</p>
             <a href={result.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-white/70 hover:text-white break-all transition-colors">{result.sourceUrl}</a>
           </div>
         )}
         <div className="px-4 py-3">
-          <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1.5">Summary</p>
+          <p className="text-xs text-white/60 uppercase tracking-widest mb-1.5">Summary</p>
           <p className="text-xs text-white/80 leading-relaxed">{analysis.summary}</p>
         </div>
         {analysis.keyStatements?.length > 0 && (
           <div className="px-4 py-3 space-y-2">
-            <p className="text-[10px] text-white/40 uppercase tracking-widest">Key Statements</p>
+            <p className="text-xs text-white/60 uppercase tracking-widest">Key Statements</p>
             {analysis.keyStatements.map((s, i) => (
               <div key={i} className="border-l-2 border-white/20 pl-3">
                 <p className="text-xs text-white/75 italic">{s}</p>
@@ -609,13 +711,13 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
         )}
         {analysis.memoryInsight && (
           <div className="px-4 py-3 bg-indigo-500/[0.06] border-t border-indigo-500/20">
-            <p className="text-[10px] text-indigo-400 uppercase tracking-widest mb-1.5">Agent Memory Insight</p>
+            <p className="text-xs text-indigo-400 uppercase tracking-widest mb-1.5">Agent Memory Insight</p>
             <p className="text-xs text-white/80 leading-relaxed">{analysis.memoryInsight}</p>
           </div>
         )}
         {analysis.threatAssessment && (
           <div className={`px-4 py-3 ${analysis.threatAssessment.isThreatening ? "bg-red-500/[0.05]" : ""}`}>
-            <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Threat Assessment</p>
+            <p className="text-xs text-white/60 uppercase tracking-widest mb-2">Threat Assessment</p>
             {analysis.threatAssessment.isThreatening ? (
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">{analysis.threatAssessment.type}</p>
@@ -632,22 +734,55 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       {/* Filecoin proof */}
       <div className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.05]">
         <div className="px-4 py-3">
-          <p className="text-[10px] text-white/40 uppercase tracking-widest mb-2">Content ID (CID)</p>
+          <p className="text-xs text-white/60 uppercase tracking-widest mb-2">Content ID (CID)</p>
           <div className="flex items-center gap-2">
             <code className="text-xs text-emerald-400 font-mono break-all flex-1">{result.cid}</code>
-            <button onClick={() => onCopy(result.cid)} className="shrink-0 text-[10px] text-white/50 hover:text-white border border-white/10 hover:border-white/30 rounded px-2 py-1 transition-colors">
+            <button onClick={() => onCopy(result.cid)} className="shrink-0 text-xs text-white/60 hover:text-white border border-white/10 hover:border-white/30 rounded px-2 py-1 transition-colors">
               {copied === result.cid ? "Copied" : "Copy"}
             </button>
           </div>
         </div>
+
+        {/* Filecoin storage proof */}
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-white/60 uppercase tracking-widest">Filecoin Storage</p>
+            {!proofData && (
+              <button onClick={fetchProof} disabled={proofLoading}
+                className="text-xs text-white/50 hover:text-white/70 border border-white/10 hover:border-white/25 rounded px-2 py-0.5 transition-colors disabled:opacity-40">
+                {proofLoading ? "Fetching..." : "Verify storage"}
+              </button>
+            )}
+          </div>
+          {proofData ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span className="text-xs text-emerald-400 font-medium">Confirmed on Filecoin via Lighthouse</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                {proofData.fileName && <p className="text-xs text-white/60">File: <span className="text-white/80">{proofData.fileName}</span></p>}
+                {proofData.fileSize && <p className="text-xs text-white/60">Size: <span className="text-white/80">{(proofData.fileSize / 1024).toFixed(1)} KB</span></p>}
+                {proofData.mimeType && <p className="text-xs text-white/60">Type: <span className="text-white/80">{proofData.mimeType}</span></p>}
+              </div>
+              <a href={`https://cid.ipfs.tech/#${result.cid}`} target="_blank" rel="noopener noreferrer"
+                className="inline-block text-xs text-white/50 hover:text-white/80 mt-1.5 transition-colors">
+                Inspect CID on IPFS ↗
+              </a>
+            </div>
+          ) : (
+            <p className="text-xs text-white/50">Click &quot;Verify storage&quot; to confirm this evidence is stored on Filecoin.</p>
+          )}
+        </div>
+
         <div className="px-4 py-3">
           <a href={`/evidence/${result.cid}`} target="_blank" rel="noopener noreferrer"
             className="flex items-center justify-between gap-3 group">
             <div>
               <p className="text-xs font-medium text-white group-hover:text-white/80 transition-colors">Share certificate</p>
-              <p className="text-[11px] text-white/40 font-mono mt-0.5">/evidence/{result.cid.slice(0, 20)}...</p>
+              <p className="text-xs text-white/50 font-mono mt-0.5">/evidence/{result.cid.slice(0, 20)}...</p>
             </div>
-            <span className="text-white/30 group-hover:text-white/70 transition-colors text-sm">↗</span>
+            <span className="text-white/50 group-hover:text-white/80 transition-colors text-sm">↗</span>
           </a>
         </div>
       </div>
@@ -668,7 +803,7 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       )}
 
       {/* Actions */}
-      <p className="text-[10px] text-white/40 leading-relaxed">
+      <p className="text-xs text-white/60 leading-relaxed">
         Save a copy now. The CID is your permanent proof — without it you cannot verify this evidence later.
       </p>
       <div className="flex gap-2">
@@ -688,7 +823,7 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
 function DetailCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-3">
-      <p className="text-[10px] text-white/40 uppercase tracking-widest mb-1">{label}</p>
+      <p className="text-xs text-white/60 uppercase tracking-widest mb-1">{label}</p>
       <p className="text-xs text-white/80">{value}</p>
     </div>
   );
