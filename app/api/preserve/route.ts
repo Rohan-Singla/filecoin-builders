@@ -118,6 +118,7 @@ Respond with ONLY valid JSON:
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const contentType = req.headers.get("content-type") || "";
 
   // File upload
@@ -263,4 +264,9 @@ export async function POST(req: NextRequest) {
     gateways: GATEWAYS.map((g) => g(cid)),
     newMemoryCid, updatedMemory,
   });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[preserve] unhandled error:", msg);
+    return NextResponse.json({ error: `Server error: ${msg}` }, { status: 500 });
+  }
 }
