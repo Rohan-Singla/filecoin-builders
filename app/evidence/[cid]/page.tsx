@@ -1,0 +1,149 @@
+import { notFound } from "next/navigation";
+
+const GATEWAYS = [
+  (cid: string) => `https://ipfs.io/ipfs/${cid}`,
+  (cid: string) => `https://cloudflare-ipfs.com/ipfs/${cid}`,
+  (cid: string) => `https://dweb.link/ipfs/${cid}`,
+];
+
+async function fetchEvidence(cid: string) {
+  for (const gateway of GATEWAYS) {
+    try {
+      const res = await fetch(gateway(cid), { next: { revalidate: 3600 }, signal: AbortSignal.timeout(10000) });
+      if (res.ok) return await res.json();
+    } catch { continue; }
+  }
+  return null;
+}
+
+const SEV: Record<string, { dot: string; badge: string }> = {
+  low: { dot: "bg-sky-400", badge: "border-sky-400/30 text-sky-400" },
+  medium: { dot: "bg-amber-400", badge: "border-amber-400/30 text-amber-400" },
+  high: { dot: "bg-red-500", badge: "border-red-500/30 text-red-400" },
+};
+
+export default async function EvidencePage({ params }: { params: Promise<{ cid: string }> }) {
+  const { cid } = await params;
+  const evidence = await fetchEvidence(cid);
+  if (!evidence) notFound();
+
+  const { evidenceId, capturedAt, sourceUrl, analysis, screenshotCid } = evidence;
+  const sev = SEV[analysis?.severity] || SEV.medium;
+
+  return (
+    <div className="min-h-screen bg-[#0c0c0c] text-white" style={{ fontFamily: "var(--font-geist-sans, system-ui, sans-serif)" }}>
+      <header className="border-b border-white/[0.06] px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-5 h-5 border border-white/20 rounded-sm flex items-center justify-center">
+            <div className="w-2 h-2 bg-white rounded-sm" />
+          </div>
+          <span className="text-sm font-semibold tracking-tight">Evidence Locker</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span className="text-xs text-emerald-400 font-medium">Verified on Filecoin</span>
+        </div>
+      </header>
+
+      <div className="max-w-[680px] mx-auto px-6 py-12 space-y-4">
+        <div className="mb-8">
+          <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Evidence Certificate</p>
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-xs text-white/40 font-mono break-all">{evidenceId}</p>
+            <div className={`flex items-center gap-1.5 shrink-0 text-xs font-medium px-2 py-1 rounded border ${sev.badge}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${sev.dot}`} />
+              {analysis?.severity?.toUpperCase()}
+            </div>
+          </div>
+        </div>
+
+        {/* Screenshot */}
+        {screenshotCid && (
+          <div className="overflow-hidden rounded-lg border border-white/[0.07]">
+            <p className="text-[10px] text-white/25 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Stored on Filecoin</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`https://ipfs.io/ipfs/${screenshotCid}`} alt="Evidence screenshot" className="w-full" />
+          </div>
+        )}
+
+        {/* Details */}
+        <div className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.05]">
+          <div className="grid grid-cols-2 divide-x divide-white/[0.05]">
+            <Cell label="Platform" value={analysis?.platform} />
+            <Cell label="Content Type" value={analysis?.contentType} />
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-white/[0.05]">
+            <Cell label="Author" value={analysis?.author} />
+            <Cell label="Content Date" value={analysis?.contentDate} />
+          </div>
+          <Cell label="Captured (UTC)" value={new Date(capturedAt).toUTCString()} />
+          {sourceUrl && (
+            <div className="px-4 py-3">
+              <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Source URL</p>
+              <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-white/60 hover:text-white break-all">{sourceUrl}</a>
+            </div>
+          )}
+          <div className="px-4 py-3">
+            <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1.5">Summary</p>
+            <p className="text-xs text-white/70 leading-relaxed">{analysis?.summary}</p>
+          </div>
+          {analysis?.keyStatements?.length > 0 && (
+            <div className="px-4 py-3 space-y-2">
+              <p className="text-[10px] text-white/30 uppercase tracking-widest">Key Statements</p>
+              {analysis.keyStatements.map((s: string, i: number) => (
+                <div key={i} className="border-l border-white/20 pl-3">
+                  <p className="text-xs text-white/60 italic">{s}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {analysis?.threatAssessment && (
+            <div className={`px-4 py-3 ${analysis.threatAssessment.isThreatening ? "bg-red-500/[0.04]" : ""}`}>
+              <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Threat Assessment</p>
+              {analysis.threatAssessment.isThreatening ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">{analysis.threatAssessment.type}</p>
+                  <p className="text-xs text-white/60">{analysis.threatAssessment.description}</p>
+                  <p className="text-xs text-amber-400">Recommendation: {analysis.threatAssessment.recommendedAction}</p>
+                </div>
+              ) : (
+                <p className="text-xs text-white/40">{analysis.threatAssessment.description}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Filecoin proof */}
+        <div className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.05]">
+          <div className="px-4 py-3">
+            <p className="text-[10px] text-white/30 uppercase tracking-widest mb-2">Content ID (CID)</p>
+            <code className="text-xs text-emerald-400 font-mono break-all">{cid}</code>
+          </div>
+          <div className="px-4 py-3 space-y-2">
+            <p className="text-[10px] text-white/30 uppercase tracking-widest">IPFS Gateways</p>
+            {GATEWAYS.map((g, i) => (
+              <a key={i} href={g(cid)} target="_blank" rel="noopener noreferrer"
+                className="block text-[11px] text-white/40 hover:text-white transition-colors truncate">
+                {g(cid)}
+              </a>
+            ))}
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-[10px] text-white/25 leading-relaxed">
+              The CID is a cryptographic hash of this evidence package. Any tampering would produce a different CID, making falsification detectable.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Cell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-4 py-3">
+      <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">{label}</p>
+      <p className="text-xs text-white/70">{value}</p>
+    </div>
+  );
+}
