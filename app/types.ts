@@ -45,6 +45,7 @@ export interface EvidenceResult {
   fileType?: string;
   fileSize?: number;
   screenshotCid?: string | null;
+  screenshotUrl?: string | null;
   analysis: Analysis;
   cid: string;
   gateways: string[];

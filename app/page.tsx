@@ -549,11 +549,11 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
       </div>
 
       {/* Screenshot */}
-      {result.screenshotCid && (
+      {(result.screenshotUrl || result.screenshotCid) && (
         <div className="overflow-hidden rounded-lg border border-white/[0.07]">
           <p className="text-[10px] text-white/40 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Filecoin</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`https://ipfs.io/ipfs/${result.screenshotCid}`} alt="Evidence screenshot" className="w-full" />
+          <img src={result.screenshotUrl || `https://ipfs.io/ipfs/${result.screenshotCid}`} alt="Evidence screenshot" className="w-full" />
         </div>
       )}
 

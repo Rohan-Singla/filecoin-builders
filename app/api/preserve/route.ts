@@ -23,7 +23,7 @@ async function fetchUrlContent(url: string): Promise<string> {
   return (await res.text()).slice(0, 12000);
 }
 
-async function captureScreenshot(url: string): Promise<string | null> {
+async function captureScreenshot(url: string): Promise<{ cid: string | null; directUrl: string | null }> {
   try {
     const res = await fetch(
       `https://api.microlink.io?url=${encodeURIComponent(url)}&screenshot=true&meta=false`,
@@ -31,13 +31,13 @@ async function captureScreenshot(url: string): Promise<string | null> {
     );
     const data = await res.json();
     const screenshotUrl = data?.data?.screenshot?.url;
-    if (!screenshotUrl) return null;
+    if (!screenshotUrl) return { cid: null, directUrl: null };
     const imgRes = await fetch(screenshotUrl, { signal: AbortSignal.timeout(10000) });
-    if (!imgRes.ok) return null;
+    if (!imgRes.ok) return { cid: null, directUrl: null };
     const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
     const response = await lighthouse.uploadBuffer(imgBuffer, process.env.LIGHTHOUSE_API_KEY!);
-    return response.data.Hash;
-  } catch { return null; }
+    return { cid: response.data.Hash, directUrl: screenshotUrl };
+  } catch { return { cid: null, directUrl: null }; }
 }
 
 // Fetch existing agent memory from Filecoin — try Lighthouse first (fastest for fresh uploads)
@@ -209,10 +209,7 @@ export async function POST(req: NextRequest) {
 
   const memory: AgentMemory = memoryData || (memoryCid ? await fetchMemory(memoryCid) : { version: 0, updatedAt: "", totalEvidence: 0, entries: [] });
 
-  const [screenshotCid] = await Promise.all([
-    captureScreenshot(url),
-  ]);
-
+  const screenshot = await captureScreenshot(url);
   const memoryContext = buildMemoryContext(memory.entries);
 
   let analysis;
@@ -225,7 +222,7 @@ export async function POST(req: NextRequest) {
   const evidencePackage = {
     evidenceId, capturedAt, sourceUrl: url,
     userContext: context || null,
-    analysis, rawContent, screenshotCid,
+    analysis, rawContent, screenshotCid: screenshot.cid,
     integrity: {
       method: "Filecoin/IPFS content addressing",
       note: "CID is a cryptographic hash. Tampering produces a different CID.",
@@ -244,7 +241,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Filecoin storage failed: ${String(e)}` }, { status: 500 });
   }
 
-  // Update agent memory on Filecoin
   const newEntry: MemoryEntry = {
     evidenceId, cid, capturedAt, sourceUrl: url,
     platform: analysis.platform, author: analysis.author, summary: analysis.summary,
@@ -260,7 +256,9 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     evidenceId, capturedAt, sourceUrl: url,
-    screenshotCid, analysis, cid,
+    screenshotCid: screenshot.cid,
+    screenshotUrl: screenshot.directUrl,
+    analysis, cid,
     gateways: GATEWAYS.map((g) => g(cid)),
     newMemoryCid, updatedMemory,
   });
