@@ -4,8 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import type { AgentMemory, MemoryEntry } from "@/app/types";
 import { fixJsonControlChars, buildMemoryContext } from "@/app/lib/utils";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse/lib/pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
@@ -141,6 +139,8 @@ export async function POST(req: NextRequest) {
       contentForAI = `Uploaded image file: "${file.name}" (${file.type}, ${(file.size / 1024).toFixed(1)} KB). User context: ${context || "none"}.`;
     } else if (isPDF) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require("pdf-parse/lib/pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
         const pdfData = await pdfParse(fileBuffer);
         const text = pdfData.text.trim().slice(0, 12000);
         contentForAI = text.length > 50
