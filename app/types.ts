@@ -14,6 +14,27 @@ export interface Analysis {
   contentType: string;
   severity: "low" | "medium" | "high";
   threatAssessment: ThreatAssessment;
+  memoryInsight: string | null;
+}
+
+export interface MemoryEntry {
+  evidenceId: string;
+  cid: string;
+  capturedAt: string;
+  sourceUrl: string | null;
+  fileName?: string;
+  platform: string;
+  author: string;
+  summary: string;
+  severity: string;
+  threatType: string | null;
+}
+
+export interface AgentMemory {
+  version: number;
+  updatedAt: string;
+  totalEvidence: number;
+  entries: MemoryEntry[];
 }
 
 export interface EvidenceResult {
@@ -28,6 +49,7 @@ export interface EvidenceResult {
   cid: string;
   gateways: string[];
   caseId?: string;
+  newMemoryCid?: string;
 }
 
 export interface Case {

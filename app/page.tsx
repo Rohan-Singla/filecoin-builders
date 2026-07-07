@@ -40,6 +40,9 @@ export default function Home() {
 
   const [history, setHistory] = useState<EvidenceResult[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
+  const [memoryCid, setMemoryCid] = useState<string | null>(null);
+  const [memoryCount, setMemoryCount] = useState(0);
+  const [memoryData, setMemoryData] = useState<object | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,11 +51,26 @@ export default function Home() {
     if (h) setHistory(JSON.parse(h));
     const c = localStorage.getItem("evidence-cases");
     if (c) setCases(JSON.parse(c));
+    const m = localStorage.getItem("agent-memory-cid");
+    if (m) setMemoryCid(m);
+    const mc = localStorage.getItem("agent-memory-count");
+    if (mc) setMemoryCount(parseInt(mc));
+    const md = localStorage.getItem("agent-memory-data");
+    if (md) setMemoryData(JSON.parse(md));
   }, []);
 
   function saveHistory(items: EvidenceResult[]) { setHistory(items); localStorage.setItem("evidence-history", JSON.stringify(items)); }
   function saveCases(items: Case[]) { setCases(items); localStorage.setItem("evidence-cases", JSON.stringify(items)); }
   function addToHistory(item: EvidenceResult) { saveHistory([item, ...history]); }
+
+  function saveMemory(cid: string, count: number, data: object) {
+    setMemoryCid(cid);
+    setMemoryCount(count);
+    setMemoryData(data);
+    localStorage.setItem("agent-memory-cid", cid);
+    localStorage.setItem("agent-memory-count", String(count));
+    localStorage.setItem("agent-memory-data", JSON.stringify(data));
+  }
 
   async function handlePreserve(e: React.FormEvent) {
     e.preventDefault();
@@ -63,17 +81,20 @@ export default function Home() {
         setStep("Uploading file...");
         const fd = new FormData();
         fd.append("file", file); fd.append("context", context);
+        if (memoryCid) fd.append("memoryCid", memoryCid);
+        if (memoryData) fd.append("memoryData", JSON.stringify(memoryData));
         res = await fetch("/api/preserve", { method: "POST", body: fd });
       } else {
         setStep("Fetching content...");
         await new Promise((r) => setTimeout(r, 400));
-        setStep("Analyzing and capturing screenshot...");
-        res = await fetch("/api/preserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, context }) });
+        setStep("Analyzing with agent memory...");
+        res = await fetch("/api/preserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url, context, memoryCid, memoryData }) });
       }
       setStep("Archiving to Filecoin...");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setResult(data); addToHistory(data);
+      if (data.newMemoryCid) saveMemory(data.newMemoryCid, memoryCount + 1, data.updatedMemory);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally { setLoading(false); setStep(""); }
@@ -89,7 +110,7 @@ export default function Home() {
       setStep(`${i + 1} / ${urls.length}`);
       setBatchProgress({ current: i + 1, total: urls.length });
       try {
-        const res = await fetch("/api/preserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: urls[i], context }) });
+        const res = await fetch("/api/preserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: urls[i], context, memoryCid }) });
         const data = await res.json();
         if (res.ok) { results.push(data); addToHistory(data); }
       } catch { /* continue */ }
@@ -155,7 +176,16 @@ export default function Home() {
           <span className="text-sm font-semibold tracking-tight">Evidence Locker</span>
           <span className="text-[10px] text-white/20 uppercase tracking-widest border border-white/10 px-1.5 py-0.5 rounded">Beta</span>
         </div>
-        <span className="text-xs text-white/30">Powered by Filecoin</span>
+        <div className="flex items-center gap-3">
+          {memoryCid && (
+            <a href={`https://ipfs.io/ipfs/${memoryCid}`} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Memory: {memoryCount} items
+            </a>
+          )}
+          <span className="text-xs text-white/20">Filecoin</span>
+        </div>
       </header>
 
       <div className="max-w-[680px] mx-auto px-6 py-12">
@@ -548,6 +578,12 @@ function Certificate({ result, cases, copied, onCopy, onDownload, assignCaseId, 
                 <p className="text-xs text-white/60 italic">{s}</p>
               </div>
             ))}
+          </div>
+        )}
+        {analysis.memoryInsight && (
+          <div className="px-4 py-3 bg-indigo-500/[0.04] border-t border-white/[0.05]">
+            <p className="text-[10px] text-indigo-400/70 uppercase tracking-widest mb-1.5">Agent Memory Insight</p>
+            <p className="text-xs text-white/60 leading-relaxed">{analysis.memoryInsight}</p>
           </div>
         )}
         {analysis.threatAssessment && (
