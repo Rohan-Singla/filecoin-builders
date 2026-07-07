@@ -493,6 +493,25 @@ export default function Home() {
         .input-base:focus { border-color: rgba(255,255,255,0.25); }
         .input-base:disabled { opacity: 0.4; }
       `}</style>
+
+      {/* Footer */}
+      <footer className="border-t border-white/[0.06] mt-16 px-6 py-8 no-print">
+        <div className="max-w-[680px] mx-auto flex items-center justify-between gap-6">
+          <div>
+            <p className="text-xs text-white/50">Built for the Filecoin TLDR Builder Challenge</p>
+            <p className="text-[11px] text-white/25 mt-0.5">AI agent memory + permanent evidence on Filecoin</p>
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
+            <a href="https://x.com/rohanbuilds" target="_blank" rel="noopener noreferrer"
+              className="text-[11px] text-white/30 hover:text-white transition-colors">X</a>
+            <a href="https://github.com/rohan-singla" target="_blank" rel="noopener noreferrer"
+              className="text-[11px] text-white/30 hover:text-white transition-colors">GitHub</a>
+            <a href="https://www.linkedin.com/in/rohan-singla100/" target="_blank" rel="noopener noreferrer"
+              className="text-[11px] text-white/30 hover:text-white transition-colors">LinkedIn</a>
+            <span className="text-[11px] text-white/15">Rohan Singla</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
