@@ -12,10 +12,35 @@ const SEV: Record<string, { dot: string; badge: string }> = {
 };
 
 const GATEWAYS = [
+  (cid: string) => `https://gateway.lighthouse.storage/ipfs/${cid}`,
   (cid: string) => `https://ipfs.io/ipfs/${cid}`,
   (cid: string) => `https://cloudflare-ipfs.com/ipfs/${cid}`,
   (cid: string) => `https://dweb.link/ipfs/${cid}`,
 ];
+
+function FallbackImage({ cid, alt, className }: { cid: string; alt: string; className?: string }) {
+  const [gatewayIndex, setGatewayIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  const handleError = () => {
+    if (gatewayIndex + 1 < GATEWAYS.length) {
+      setGatewayIndex(gatewayIndex + 1);
+    } else {
+      setFailed(true);
+    }
+  };
+
+  if (failed) {
+    return (
+      <div className="w-full py-10 flex items-center justify-center text-xs text-white/30">
+        Screenshot unavailable — all gateways failed
+      </div>
+    );
+  }
+
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={GATEWAYS[gatewayIndex](cid)} alt={alt} className={className} onError={handleError} />;
+}
 
 async function fetchFromGateways(cid: string): Promise<EvidenceResult | null> {
   for (const gateway of GATEWAYS) {
@@ -118,8 +143,7 @@ export default function EvidencePage({ params }: { params: Promise<{ cid: string
         {screenshotCid && (
           <div className="overflow-hidden rounded-lg border border-white/[0.07]">
             <p className="text-[10px] text-white/25 uppercase tracking-widest px-3 pt-3 pb-2">Screenshot — Stored on Filecoin</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`https://ipfs.io/ipfs/${screenshotCid}`} alt="Evidence screenshot" className="w-full" />
+            <FallbackImage cid={screenshotCid} alt="Evidence screenshot" className="w-full" />
           </div>
         )}
 
