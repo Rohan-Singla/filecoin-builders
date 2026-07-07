@@ -3,6 +3,8 @@ import lighthouse from "@lighthouse-web3/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import type { AgentMemory, MemoryEntry } from "@/app/types";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require("pdf-parse/lib/pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
@@ -103,9 +105,9 @@ async function analyzeContent(
 Source: ${source}
 User context: ${context || "No additional context provided"}
 
---- AGENT MEMORY (${memoryContext === "No previous evidence in memory." ? "empty" : "previous evidence"}) ---
+AGENT MEMORY (${memoryContext === "No previous evidence in memory." ? "empty" : "previous evidence"}):
 ${memoryContext}
---- END MEMORY ---
+END MEMORY
 
 New content to analyze:
 ${content}
@@ -143,7 +145,7 @@ Respond with ONLY valid JSON:
 export async function POST(req: NextRequest) {
   const contentType = req.headers.get("content-type") || "";
 
-  // --- File upload ---
+  // File upload
   if (contentType.includes("multipart/form-data")) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -154,9 +156,28 @@ export async function POST(req: NextRequest) {
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     const isImage = file.type.startsWith("image/");
-    const contentForAI = isImage
-      ? `Uploaded image: "${file.name}" (${file.type}, ${(file.size / 1024).toFixed(1)} KB). User context: ${context || "none"}.`
-      : fileBuffer.toString("utf-8").slice(0, 12000);
+    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf");
+    const isText = file.type.startsWith("text/") || file.name.endsWith(".txt");
+
+    let contentForAI: string;
+    if (isImage) {
+      contentForAI = `Uploaded image file: "${file.name}" (${file.type}, ${(file.size / 1024).toFixed(1)} KB). User context: ${context || "none"}.`;
+    } else if (isPDF) {
+      try {
+        const pdfData = await pdfParse(fileBuffer);
+        const text = pdfData.text.trim().slice(0, 12000);
+        contentForAI = text.length > 50
+          ? `PDF document: "${file.name}"\n\nExtracted text:\n${text}`
+          : `PDF file: "${file.name}" — text extraction returned minimal content. File size: ${(file.size / 1024).toFixed(1)} KB.`;
+      } catch {
+        contentForAI = `PDF file: "${file.name}" (${(file.size / 1024).toFixed(1)} KB) — could not extract text. User context: ${context || "none"}.`;
+      }
+    } else if (isText) {
+      contentForAI = fileBuffer.toString("utf-8").slice(0, 12000);
+    } else {
+      // Word docs, unknown binary files — describe by name/size
+      contentForAI = `Uploaded file: "${file.name}" (${file.type || "unknown type"}, ${(file.size / 1024).toFixed(1)} KB). User context: ${context || "none"}.`;
+    }
 
     const memory: AgentMemory = (memoryDataRaw ? JSON.parse(memoryDataRaw) : null) ||
       (memoryCid ? await fetchMemory(memoryCid) : { version: 0, updatedAt: "", totalEvidence: 0, entries: [] });
@@ -200,9 +221,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // --- URL ---
-  // memoryData: client sends its local copy of memory directly — no gateway round-trip needed.
-  // memoryCid: stored on Filecoin as the verifiable permanent record.
+  // URL: memoryData is sent directly from client cache; memoryCid is the verifiable Filecoin record.
   const { url, context, memoryCid, memoryData } = await req.json();
   if (!url) return NextResponse.json({ error: "No URL provided" }, { status: 400 });
 

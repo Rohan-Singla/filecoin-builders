@@ -488,7 +488,7 @@ export default function Home() {
   );
 }
 
-// ---- Sub components ----
+// Sub components
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

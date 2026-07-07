@@ -26,7 +26,7 @@ Evidence ${i + 1}:
 - Threat type: ${e.analysis.threatAssessment?.type || "none"}
 - Threat description: ${e.analysis.threatAssessment?.description || "N/A"}
 - Filecoin CID: ${e.cid}
-`).join("\n---\n");
+`).join("\n\n");
 
   const prompt = `You are a legal evidence analyst building a case timeline.
 
