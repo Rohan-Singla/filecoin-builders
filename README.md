@@ -157,4 +157,3 @@ Built using **Claude Code** as the primary AI build partner.
 **Repo:** [github.com/Rohan-Singla/filecoin-builders](https://github.com/Rohan-Singla/filecoin-builders)  
 **Filecoin primitives:** Storage, content addressing, agent memory on-chain, storage proof via Lighthouse  
 **Agent mechanic:** Persistent cross-session memory stored on Filecoin; every analysis builds on past evidence retrieved from the network  
-**X post:** _add after posting_
